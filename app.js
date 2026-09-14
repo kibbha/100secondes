@@ -1,0 +1,34 @@
+const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const KEY="100seconds_v2";
+let d=JSON.parse(localStorage.getItem(KEY)||'{"best":0,"coins":250,"games":0,"earned":0,"maxCombo":1,"xp":0,"daily":{"date":"","best":0,"played":false},"items":{"shield":0,"turbo":0,"double":0}}');
+function save(){localStorage.setItem(KEY,JSON.stringify(d));refresh()}
+function refresh(){let lvl=Math.floor(d.xp/500)+1,xp=d.xp%500;$("#best").textContent=d.best;$("#coins").textContent=d.coins;$("#level").textContent=lvl;$("#games").textContent=d.games;$("#shopCoins").textContent=d.coins;$("#sGames").textContent=d.games;$("#sBest").textContent=d.best;$("#sCoins").textContent=d.earned;$("#sCombo").textContent="x"+d.maxCombo;$("#sLevel").textContent=lvl;$("#xpBar").style.width=(xp/5)+"%";$("#dailyBadge").textContent=d.daily.date===today()?d.daily.best:0;$("#dbest").textContent=d.daily.date===today()?d.daily.best:0;$("#rankName").textContent=lvl<3?"Débutant":lvl<6?"Joueur confirmé":lvl<10?"Expert":"Légende"}
+function today(){return new Date().toISOString().slice(0,10)}
+function screen(id){$$(".screen").forEach(x=>x.classList.remove("active"));$("#"+id).classList.add("active");refresh();if(id==="shop")renderShop()}
+function toast(t){let x=$("#toast");x.textContent=t;x.classList.add("show");setTimeout(()=>x.classList.remove("show"),1400)}
+$$("[data-screen]").forEach(b=>b.onclick=()=>screen(b.dataset.screen));
+
+const colors=[["🔴","#e74c3c"],["🔵","#3498db"],["🟢","#2ecc71"],["🟡","#f1c40f"]];
+const generators=[
+()=>{let a=rand(2,12),b=rand(2,12),ans=a+b;return numeric(`${a} + ${b} = ?`,ans)},
+()=>{let a=rand(3,12),b=rand(2,9),ans=a*b;return numeric(`${a} × ${b} = ?`,ans)},
+()=>{let a=rand(20,90),b=rand(2,15),ans=a-b;return numeric(`${a} − ${b} = ?`,ans)},
+()=>{let ans=rand(10,99),vals=[ans,ans+1,ans-1,ans+2].sort(()=>Math.random()-.5);return {html:`<div class="q">Tape le nombre <b>${ans}</b></div><div class="choices">${vals.map(v=>`<button class="choice" data-v="${v}">${v}</button>`).join("")}</div>`,answer:ans}},
+()=>{let c=[...colors].sort(()=>Math.random()-.5),target=c[rand(0,3)];return{html:`<div class="q">Trouve ${target[0]}</div><div class="colorGrid">${c.map(v=>`<button class="colorBtn" style="background:${v[1]}" data-v="${v[0]}"></button>`).join("")}</div>`,answer:target[0]}},
+()=>{let n=rand(3,5),seq=Array.from({length:n},()=>rand(0,1)),html=`<div class="q">Mémorise la séquence</div><div class="memory">${seq.map(v=>`<i class="memDot ${v?"on":""}"></i>`).join("")}</div><div class="sub">Elle disparaît dans un instant...</div>`;return{html,answer:seq.join(""),memory:seq}},
+()=>{let ans=rand(1,4);return{html:`<div class="q">Appuie ${ans} fois</div><button class="tap" id="tap">TAP !</button>`,answer:ans,taps:true}}
+];
+function numeric(q,ans){let vals=[ans,ans+rand(1,3),ans-rand(1,3),ans+rand(4,7)];vals=[...new Set(vals)];while(vals.length<4)vals.push(ans+vals.length+5);vals.sort(()=>Math.random()-.5);return{html:`<div class="q">${q}</div><div class="choices">${vals.map(v=>`<button class="choice" data-v="${v}">${v}</button>`).join("")}</div>`,answer:ans}}
+function rand(a,b){return Math.floor(Math.random()*(b-a+1))+a}
+
+let G={};
+function start(mode="normal"){clearInterval(G.int);G={score:0,combo:d.items.turbo?2:1,left:100,mode,usedShield:false,max:1,count:0};screen("game");$("#gscore").textContent=0;$("#gcombo").textContent="x"+G.combo;$("#gtimer").textContent=100;$("#meter").style.width="100%";next();G.int=setInterval(()=>{G.left--;$("#gtimer").textContent=G.left;$("#meter").style.width=G.left+"%";if(G.left<=0)finish()},1000)}
+function next(){if(G.left<=0)return;G.count++;$("#missionCount").textContent=G.count;let c=generators[rand(0,generators.length-1)](),el=$("#challenge");el.innerHTML=c.html;$$(".choice").forEach(b=>b.onclick=()=>answer(b.dataset.v,c.answer));if(c.taps){let n=0,btn=$("#tap");btn.onclick=()=>{n++;btn.textContent=n+"/"+c.answer;if(n>=c.answer)answer(n,c.answer)}}if(c.memory){setTimeout(()=>{$$(".memDot").forEach(x=>x.classList.remove("on"));let buttons=document.createElement("div");buttons.className="choices";buttons.innerHTML='<button class="choice" data-v="0">PAIR</button><button class="choice" data-v="1">IMPAIR</button>';el.appendChild(buttons);$$(".choice").forEach(b=>b.onclick=()=>answer(Number(b.dataset.v),c.memory.filter(Boolean).length%2))},900)}}
+function answer(v,a){if(G.answered)return;G.answered=true;let ok=String(v)===String(a);if(ok){G.score+=10*G.combo;G.combo=Math.min(12,G.combo+1);G.max=Math.max(G.max,G.combo);feedback("✓ PARFAIT",true)}else if(d.items.shield&&!G.usedShield){G.usedShield=true;feedback("🛡️ BOUCLIER",true)}else{G.combo=1;feedback("✕ RATÉ",false)}$("#gscore").textContent=G.score;$("#gcombo").textContent="x"+G.combo;setTimeout(()=>{G.answered=false;if(G.left>0)next()},180)}
+function feedback(t,good){let x=$("#feedback");x.textContent=t;x.className="feedback "+(good?"good":"bad")}
+function finish(){clearInterval(G.int);let old=d.best;d.games++;d.maxCombo=Math.max(d.maxCombo,G.max);let gain=Math.max(5,Math.floor(G.score/22));if(d.items.double)gain*=2;d.coins+=gain;d.earned+=gain;d.xp+=Math.max(10,G.score);if(G.score>d.best)d.best=G.score;if(G.mode==="daily"){if(d.daily.date!==today())d.daily={date:today(),best:G.score,played:true};else d.daily.best=Math.max(d.daily.best,G.score)}save();$("#resultScore").textContent=G.score;$("#earned").textContent=gain;$("#rCombo").textContent="x"+G.max;$("#rChallenges").textContent=G.count;$("#newRecord").innerHTML=G.score>old?'<span class="new">🏆 NOUVEAU RECORD</span>':"";$("#resultIcon").textContent=G.score>old?"🏆":"⚡";$("#resultLabel").textContent=G.mode==="daily"?"DÉFI DU JOUR":"PARTIE TERMINÉE";screen("result")}
+$("#play").onclick=()=>start();$("#replay").onclick=()=>start();$("#quit").onclick=()=>{clearInterval(G.int);screen("home")};
+$("#daily").onclick=()=>{let names=["Calcul éclair","Réflexes express","Mémoire minute","Mode vitesse"];let i=new Date().getDate()%names.length;$("#dailyTitle").textContent=names[i];$("#dailyDesc").textContent="Une tentative par jour. Fais mieux que ton record et construis ta série.";screen("dailyScreen")};$("#dailyPlay").onclick=()=>start("daily");
+const shops=[["shield","🛡️","Bouclier","Protège d'une erreur",100],["turbo","🔥","Turbo","Commence à x2",150],["double","💎","Double pièces","Récompenses x2",250]];
+function renderShop(){$("#shopItems").innerHTML=shops.map(x=>`<article class="item"><div class="itemIcon">${x[1]}</div><div><h3>${x[2]}</h3><p>${x[3]} · Possédé : ${d.items[x[0]]}</p></div><button data-buy="${x[0]}" ${d.coins<x[4]?"disabled":""}>🪙 ${x[4]}</button></article>`).join("");$$("[data-buy]").forEach(b=>b.onclick=()=>{let x=shops.find(a=>a[0]===b.dataset.buy);if(d.coins>=x[4]){d.coins-=x[4];d.items[x[0]]++;save();renderShop();toast("Bonus acheté !")}})}
+refresh();renderShop();
